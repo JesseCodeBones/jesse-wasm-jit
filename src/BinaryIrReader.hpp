@@ -6,13 +6,14 @@
 #include <cstring>
 #include <stdexcept>
 #include <vector>
+#include "Backend.hpp"
 namespace jc {
 class Module {};
 
 class BinaryIrReader {
 public:
   BinaryIrReader(std::vector<uint8_t> &input_, Module &module_) noexcept
-      : input(input_), module(module_) {
+      : input(input_), module(module_), backend() {
   }
   void read();
 
@@ -20,6 +21,7 @@ private:
   uint32_t pos = 0U;
   std::vector<uint8_t> &input;
   Module &module;
+  Backend backend;
   void skipHeader() {
     if (pos == 0U) {
       pos += 8U;

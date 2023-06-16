@@ -42,14 +42,17 @@ void BinaryIrReader::read() {
         {
           uint32_t value = readLEB128<uint32_t>();
           std::cout << "i32.const=" << value << std::endl;
+          backend.I32Const(value);
           break;
         }
         case 0x6A: {
           std::cout << "i32.add" << std::endl;
+          backend.I32Add();
           break;
         }
         case 0x1a: {
           std::cout << "drop" << std::endl;
+          backend.Drop();
           break;
         }
         case 0x0b: {
