@@ -10,6 +10,15 @@
 namespace jc {
 class Module {};
 
+struct GlobalItem{
+  bool isMutable;
+  uint32_t index;
+  union{
+    uint32_t intValue;
+    uint64_t longValue;
+  } data;
+};
+
 class BinaryIrReader {
 public:
   BinaryIrReader(std::vector<uint8_t> &input_, Module &module_) noexcept
@@ -22,6 +31,8 @@ private:
   std::vector<uint8_t> &input;
   Module &module;
   Backend backend;
+  std::vector<std::vector<uint8_t>> memory;
+  std::vector<GlobalItem> globals;
   void skipHeader() {
     if (pos == 0U) {
       pos += 8U;
