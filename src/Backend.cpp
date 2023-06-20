@@ -1,21 +1,18 @@
 #include "Backend.hpp"
 #include <cstdint>
+#include <memory>
+#include "ExecutableInstruction.hpp"
 
 using namespace jc;
 
 void Backend::I32Const(uint32_t value) {
-  runningStack.push(static_cast<uint64_t>(value));
+  functionBodies.back().push_back(std::make_shared<I32_Const>(value, runningStack));
 }
 
 void Backend::I32Add() {
-  uint64_t operand1 = runningStack.top();
-  runningStack.pop();
-  uint64_t operand2 = runningStack.top();
-  runningStack.pop();
-  uint32_t result = static_cast<uint32_t>(operand1 + operand2);
-  runningStack.push(static_cast<uint64_t>(result));
+  functionBodies.back().push_back(std::make_shared<I32_Add>(runningStack));
 }
 
-void Backend::Drop(){
-  runningStack.pop();
+void Backend::Ins_Drop() {
+  functionBodies.back().push_back(std::make_shared<Drop>(runningStack));
 }

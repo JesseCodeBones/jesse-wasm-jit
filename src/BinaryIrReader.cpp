@@ -15,20 +15,25 @@ void BinaryIrReader::read() {
     switch (sectionCode) {
     case SectionCode::Type: // type section
     {
-      uint32_t size = readLEB128<uint32_t>();
+      uint32_t size = readLEB128();
       skipN(size);
       break;
     }
     case SectionCode::Function: // function section
     {
-      uint32_t size = readLEB128<uint32_t>();
-      skipN(size);
+      uint32_t size = readLEB128();
+      uint32_t functionSize = readLEB128();
+      while (functionSize > 0) {
+        functionSize--;
+        uint32_t typeID = readLEB128();
+        backend.functions.push_back(typeID);
+      }
       break;
     }
     case SectionCode::Memory: { // memory section
-      uint32_t size = readLEB128<uint32_t>();
+      uint32_t size = readLEB128();
       uint32_t oldPos = pos;
-      uint32_t memoryCount = readLEB128<uint32_t>();
+      uint32_t memoryCount = readLEB128();
       uint8_t initPage = readU8();
       uint8_t maxPage = readU8();
       if (oldPos + size > pos) { // only support one memory, skip others
@@ -36,50 +41,50 @@ void BinaryIrReader::read() {
       }
       while (maxPage > 0) {
         maxPage--;
-        memory.push_back(std::vector<uint8_t>(WASM_MEMORY_ONE_PAGE_SIZE));
+        backend.memory.push_back(std::vector<uint8_t>(WASM_MEMORY_ONE_PAGE_SIZE));
       }
       break;
     }
-    case SectionCode::Global:{
-      uint32_t size = readLEB128<uint32_t>();
-      uint32_t globalSize = readLEB128<uint32_t>();
+    case SectionCode::Global: {
+      uint32_t size = readLEB128();
+      uint32_t globalSize = readLEB128();
       uint32_t index = 0;
       while (globalSize > 0) {
-       globalSize--;
-       uint8_t globalType = readU8();
-       if (globalType >= Type::f64 && globalType <= Type::i32) {
-        uint8_t isMutable= readU8();
-        uint8_t opcode = readU8();
-        switch (opcode) {
-          case OPCode::i32_const:
-          {
-            uint32_t value = readLEB128<uint32_t>();
-            globals.push_back({static_cast<bool>(isMutable), index, value});
+        globalSize--;
+        uint8_t globalType = readU8();
+        if (globalType >= Type::f64 && globalType <= Type::i32) {
+          uint8_t isMutable = readU8();
+          uint8_t opcode = readU8();
+          switch (opcode) {
+          case OPCode::i32_const: {
+            uint32_t value = readLEB128();
+            backend.globals.push_back({static_cast<bool>(isMutable), index, value});
             break;
           }
+          }
+          opcode = readU8();
+          index++;
+        } else {
+          throw std::runtime_error("invalid global type");
         }
-        opcode = readU8();
-        index++;
-       } else {
-        throw std::runtime_error("invalid global type");
-       }
       }
       break;
     }
     case SectionCode::Export: // export section
     {
-      uint32_t size = readLEB128<uint32_t>();
+      uint32_t size = readLEB128();
       skipN(size);
       break;
     }
 
     case SectionCode::Code: // code section
     {
-      uint32_t codeSize = readLEB128<uint32_t>();
-      uint32_t functionIndex = readLEB128<uint32_t>();
-      uint32_t functionSize = readLEB128<uint32_t>();
+      uint32_t codeSize = readLEB128();
+      uint32_t functionIndex = readLEB128();
+      uint32_t functionSize = readLEB128();
       uint32_t functionStartPos = pos;
-      uint32_t localSize = readLEB128<uint32_t>();
+      uint32_t localSize = readLEB128();
+      backend.acquireNewFunction();
       skipN(localSize);
       while (pos < functionSize + functionStartPos) {
         // read instruction
@@ -87,7 +92,7 @@ void BinaryIrReader::read() {
         switch (opCode) {
         case OPCode::i32_const: // i32.const
         {
-          uint32_t value = readLEB128<uint32_t>();
+          uint32_t value = readLEB128();
           std::cout << "i32.const=" << value << std::endl;
           backend.I32Const(value);
           break;
@@ -99,7 +104,7 @@ void BinaryIrReader::read() {
         }
         case OPCode::drop: {
           std::cout << "drop" << std::endl;
-          backend.Drop();
+          backend.Ins_Drop();
           break;
         }
         case OPCode::end: {
@@ -115,21 +120,21 @@ void BinaryIrReader::read() {
       break;
     }
     case SectionCode::Data: { // data section
-      uint32_t size = readLEB128<uint32_t>();
-      uint32_t dataCount = readLEB128<uint32_t>();
+      uint32_t size = readLEB128();
+      uint32_t dataCount = readLEB128();
       while (dataCount > 0) {
         dataCount--;
-        uint32_t memoryIndex = readLEB128<uint32_t>();
+        uint32_t memoryIndex = readLEB128();
         uint8_t opcode = readU8();
         if (opcode != OPCode::i32_const) { // i32.const
           throw std::runtime_error("unsupported opcode");
         }
-        uint32_t offset = readLEB128<uint32_t>();
+        uint32_t offset = readLEB128();
         uint8_t endOpcode = readU8();
         if (endOpcode != OPCode::end) { // end
           throw std::runtime_error("unsupported opcode");
         }
-        uint32_t dataSize = readLEB128<uint32_t>();
+        uint32_t dataSize = readLEB128();
         uint32_t targetPage = static_cast<uint32_t>(offset / WASM_MEMORY_ONE_PAGE_SIZE);
         bool fromBegin = false;
         do {
@@ -145,7 +150,8 @@ void BinaryIrReader::read() {
           std::string_view contentView(reinterpret_cast<char *>(input.data() + pos),
                                        reinterpret_cast<char *>(input.data() + pos + willCopySize));
           std::cout << "data section:" << contentView << std::endl;
-          std::memcpy(memory[targetPage].data() + realOffset, input.data() + pos, willCopySize);
+          std::memcpy(backend.memory[targetPage].data() + realOffset, input.data() + pos,
+                      willCopySize);
           dataSize -= willCopySize;
           skipN(willCopySize);
         } while (dataSize > 0);
